@@ -46,7 +46,7 @@ class Bird(pg.sprite.Sprite):
         pg.K_DOWN: (0, +1),
         pg.K_LEFT: (-1, 0),
         pg.K_RIGHT: (+1, 0),
-    }
+    }       
 
     def __init__(self, num: int, xy: tuple[int, int]):
         """
@@ -73,6 +73,9 @@ class Bird(pg.sprite.Sprite):
         self.rect.center = xy
         self.speed = 10
 
+        self.state = "normal" #状態の変数
+        self.hyper_life = 0 #無敵時間の変数
+
     def change_img(self, num: int, screen: pg.Surface):
         """
         こうかとん画像を切り替え，画面に転送する
@@ -82,12 +85,16 @@ class Bird(pg.sprite.Sprite):
         self.image = pg.transform.rotozoom(pg.image.load(f"fig/{num}.png"), 0, 0.9)
         screen.blit(self.image, self.rect)
 
-    def update(self, key_lst: list[bool], screen: pg.Surface):
+    def update(self, key_lst: list[bool], screen: pg.Surface, score: "Score"):
         """
         押下キーに応じてこうかとんを移動させる
         引数1 key_lst：押下キーの真理値リスト
         引数2 screen：画面Surface
         """
+        if key_lst[pg.K_RSHIFT] and score.value >= 100 and self.state == "normal": #発動条件
+            self.state = "hyper"
+            self.hyper_life = 500
+            score.value -= 100  # スコア消費
         sum_mv = [0, 0]
         for k, mv in __class__.delta.items():
             if key_lst[k]:
@@ -99,6 +106,11 @@ class Bird(pg.sprite.Sprite):
         if not (sum_mv[0] == 0 and sum_mv[1] == 0):
             self.dire = tuple(sum_mv)
             self.image = self.imgs[self.dire]
+        if self.state == "hyper": #状態の判断
+            self.image = pg.transform.laplacian(self.image)
+            self.hyper_life -= 1
+            if self.hyper_life < 0:
+                self.state = "normal"
         screen.blit(self.image, self.rect)
 
 
@@ -273,6 +285,37 @@ class Life:
             screen.blit(self.image, self.rect)
 
 
+class Life:
+    """
+    残機数が0になるまで死なない
+    初期残機数：3
+    発動条件：爆弾に当たるたびに1減る
+    描画位置：画面右下（最右ハートの重心が下から50, 右から50）
+    """
+    def __init__(self, num: int):
+        """
+        引数 num：初期残機数
+        """
+        self.num = num
+        self.image = pg.Surface((40, 40))
+        self.image.set_colorkey((0, 0, 0)) 
+        
+        points = [(16*math.sin(t/100)**3 + 20,
+                   -(13*math.cos(t/100)-5*math.cos(2*t/100)-2*math.cos(3*t/100)-math.cos(4*t/100)) + 20
+                   ) for t in range(0, 628)]
+        pg.draw.polygon(self.image, (255, 0, 0), points) # 赤色のハート
+        
+        self.rect = self.image.get_rect()
+
+    def update(self, screen: pg.Surface):
+        """
+        現在の残機数分だけハートを画面右下に描画する
+        """
+        for i in range(self.num):
+            self.rect.center = (WIDTH - 50 - (i * 50), HEIGHT - 50)  # # 右から50px、下から50pxの位置を起点に、左方向に並べる
+            screen.blit(self.image, self.rect)
+
+
 def main():
     pg.display.set_caption("真！こうかとん無双")
     screen = pg.display.set_mode((WIDTH, HEIGHT))
@@ -323,7 +366,7 @@ def main():
                 time.sleep(2)
                 return
 
-        bird.update(key_lst, screen)
+        bird.update(key_lst, screen, score)
         beams.update()
         beams.draw(screen)
         emys.update()
